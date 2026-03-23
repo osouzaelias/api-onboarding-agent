@@ -1,0 +1,148 @@
+openapi: 3.0.3
+info:
+  title: Agentic Commerce Protocol API
+  description: >
+    API para simulação de negociação e compra autônoma via agentes. 
+    Esta API permite consultar um catálogo de produtos, enviar propostas de negociação de preço 
+    e finalizar o checkout. 
+    
+    Regra de negócio importante: O fluxo ideal de integração exige que o agente consulte o 
+    catálogo (/catalog), envie uma proposta válida (/negotiate) e, em caso de sucesso, 
+    realize a compra (/checkout).
+  version: 1.0.0
+servers:
+  - url: http://localhost:8080/api/v1
+    description: Servidor Local de Sandbox
+
+paths:
+  /catalog:
+    get:
+      summary: Lista os produtos disponíveis
+      description: Retorna o catálogo completo de produtos com seus IDs, nomes e preços base. O preço base é o valor sugerido, mas agentes podem tentar negociar valores menores no endpoint /negotiate.
+      operationId: getCatalog
+      responses:
+        '200':
+          description: Sucesso. Retorna um array de produtos.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Product'
+
+  /negotiate:
+    post:
+      summary: Envia uma proposta de preço
+      description: >
+        Permite que um agente proponha um valor menor para um produto específico. 
+        Se o valor proposto (`proposed_price`) for aceito pela margem interna da empresa, a API 
+        retorna status "accepted". Caso contrário, retorna "rejected".
+      operationId: submitNegotiation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NegotiationRequest'
+      responses:
+        '200':
+          description: Resposta da negociação (aceita ou rejeitada).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NegotiationResponse'
+        '400':
+          description: Payload inválido.
+        '404':
+          description: Produto não encontrado.
+
+  /checkout:
+    post:
+      summary: Finaliza a compra do produto
+      description: >
+        Processa o pedido do produto. Este endpoint é protegido e exige autenticação.
+        Para ambiente de Sandbox, utilize OBRIGATORIAMENTE o token estático: `sandbox-token-123`.
+        Deve ser passado no header `Authorization` no formato `Bearer sandbox-token-123`.
+      operationId: processCheckout
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheckoutRequest'
+      responses:
+        '200':
+          description: Compra realizada com sucesso.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: Compra realizada com sucesso pelo Agente!
+        '401':
+          description: Não autorizado. Token de Sandbox inválido ou ausente.
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Utilize o token estático `sandbox-token-123` para testes em ambiente local.
+
+  schemas:
+    Product:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        name:
+          type: string
+          example: Licença API Agentic Commerce
+        price:
+          type: number
+          format: float
+          example: 1000.00
+
+    NegotiationRequest:
+      type: object
+      required:
+        - product_id
+        - proposed_price
+      properties:
+        product_id:
+          type: integer
+          description: ID do produto que deseja negociar.
+          example: 1
+        proposed_price:
+          type: integer
+          description: Valor proposto pelo comprador. OBRIGATÓRIO ser em centavos (formato inteiro).
+          example: 85000
+
+    NegotiationResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: accepted
+        message:
+          type: string
+          example: Proposta aceita! Pode prosseguir para o checkout.
+
+    CheckoutRequest:
+      type: object
+      required:
+        - product_id
+      properties:
+        product_id:
+          type: integer
+          description: ID do produto para finalizar a compra.
+          example: 1
